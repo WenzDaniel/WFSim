@@ -43,6 +43,7 @@ class Resource:
                 's2_per_pmt_params': 'Kr83m_Ddriven_per_pmt_params_dataframe.csv',
                 'photon_ap_cdfs': 'x1t_pmt_afterpulse_config.pkl.gz',
                 'fdc_3d': 'XENON1T_FDC_SR1_data_driven_time_dependent_3d_correction_tf_nn_part1_v1.json.gz',
+                'eff_diffusion': 'XENON1T_effective_diffusion_SR1.pkl',
             })
         elif config['detector'] == 'XENONnT':
             files.update({
@@ -72,6 +73,7 @@ class Resource:
             self.s2_light_yield_map = make_map(files['s2_light_yield_map'], fmt='json')
             self.s2_per_pmt_params = straxen.get_resource(files['s2_per_pmt_params'], fmt='csv')
             self.fdc_3d = make_map(files['fdc_3d'], fmt='json.gz')
+            self.eff_diffusion = straxen.get_resource(files['eff_diffusion'], fmt='pkl')
 
         if config['detector'] == 'XENONnT':
             self.s1_pattern_map = make_map(files['s1_pattern_map'], fmt='pkl')

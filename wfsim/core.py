@@ -353,6 +353,7 @@ class S2(Pulse):
 
             positions = np.array([x_obs, y_obs]).T  # For map interpolation
         else:
+            r_obs = np.sqrt(x**2 + y**2)
             z_obs = z
             positions = np.array([x, y]).T  # For map interpolation
 
@@ -377,7 +378,7 @@ class S2(Pulse):
         n_electron = np.random.binomial(n=n_electron, p=cy)
 
         # Second generate photon timing and channel
-        self.photon_timings(t, n_electron, z_obs, sc_gain)
+        self.photon_timings(t, n_electron, r_obs, z_obs, sc_gain)
         self.photon_channels(positions)
 
         super().__call__()
@@ -415,13 +416,14 @@ class S2(Pulse):
         probabilities = 1 - np.random.uniform(0, 1, size=shape)
         return uniform_to_emission_time(probabilities)
 
-    def electron_timings(self,t, n_electron, z, sc_gain):
+    def electron_timings(self,t, n_electron, r, z, sc_gain):
 
         # Diffusion model from Sorensen 2011
         drift_time_mean = - z / \
                           self.config['drift_velocity_liquid'] + self.config['drift_time_gate']
         _drift_time_mean = np.clip(drift_time_mean, 0, None)
-        drift_time_stdev = np.sqrt(2 * self.config['diffusion_constant_liquid'] * _drift_time_mean)
+        #drift_time_stdev = np.sqrt(2 * self.config['diffusion_constant_liquid'] * _drift_time_mean)
+        drift_time_stdev = np.sqrt(2 * self.resource.eff_diffusion.lookup(r, z) * _drift_time_mean)
         drift_time_stdev /= self.config['drift_velocity_liquid']
         # Calculate electron arrival times in the ELR region
         _electron_timings = t + \
@@ -433,11 +435,11 @@ class S2(Pulse):
         self._electron_gains = np.append(
             self._electron_gains, np.repeat(sc_gain, len(_electron_timings)))
 
-    def photon_timings(self,t, n_electron, z, sc_gain):
+    def photon_timings(self,t, n_electron, r, z, sc_gain):
         # First generate electron timinga
         self._electron_timings = np.array([])
         self._electron_gains = np.array([])
-        list(map(self.electron_timings, t, n_electron, z, sc_gain))
+        list(map(self.electron_timings, t, n_electron, r, z, sc_gain))
 
         # TODO log this
         if len(self._electron_timings) < 1:
