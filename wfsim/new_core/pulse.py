@@ -84,17 +84,17 @@ class Pulse:
 
     def init_spe_scaling_factor_distributions(self, detector='tpc', truncate=True):
         """
-        Function which reads in ADC x Sample SPE disributions.
+        Function which reads in ADC x Sample SPE distribution.
 
-        Note if a distribtion extents into negative regions it is truncated.
+        Note if a distraction extents into negative regions it is truncated.
 
         :param detector: Which detector should be used.
         :param truncate: If true SPE distributions are truncated in the
             negative regions.
 
-        :retunrs: two numpy.arrays. First one containing the charge binning
+        :returns: two numpy.arrays. First one containing the charge binning
             in units of ADC x sample and the second array contains the
-            distributions for the induvodual PMTs.
+            distributions for the individual PMTs.
         """
         # TODO: How to add the nveto?
         spe_shapes = self.resource.photon_area_distribution
