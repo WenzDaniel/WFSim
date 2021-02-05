@@ -31,8 +31,7 @@ def init_spe_scaling_factor_distributions(file):
 
 
 @export
-@numba.jit(numba.int32(numba.int64[:], numba.int64, numba.int64, numba.int64[:, :]),
-           nopython=True)
+@numba.njit()
 def find_intervals_below_threshold(w, threshold, holdoff, result_buffer):
     """Fills result_buffer with l, r bounds of intervals in w < threshold.
     :param w: Waveform to do hitfinding in
