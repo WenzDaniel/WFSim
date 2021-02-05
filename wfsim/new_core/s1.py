@@ -146,7 +146,7 @@ def get_s1_pulse_properties(interactions, pattern_map, channels, config, model, 
         offset += n_ph
 
 
-@numba.njit(parallel=True)
+@numba.njit(parallel=False)
 def get_pmt_channels(n_ph, channels, pattern):
     """
     Function which returns the channel ids for a given probability
@@ -164,7 +164,7 @@ def get_pmt_channels(n_ph, channels, pattern):
     return res
 
 
-@numba.njit(parallel=True)
+@numba.njit(parallel=False)
 def get_photon_timing(n_ph, efield, int_type, phase, recombination_model, config):
     """
     Computes the photon arrival time depending on LXe recombination and singlet

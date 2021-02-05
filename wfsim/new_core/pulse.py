@@ -170,7 +170,7 @@ def copy_photon_information(times_and_channels, photons):
     """
     Copies photon information from one to another array.
     """
-    for i in numba.prange(len(times_and_channels)):
+    for i in range(len(times_and_channels)):
         tc = times_and_channels[i]
         ph = photons[i]
         ph['time'] = tc['time']
@@ -496,7 +496,7 @@ def _add_noise(data, noise_data):
     data[:] += noise_data[id_t:length_noise + id_t]
 
 
-@numba.njit(nogil=True, cache=True, parallel=True)
+@numba.njit(nogil=True, cache=True, parallel=False)
 def _digitize_signal(data, baseline, saturation_value=2**14):
     """
     Function which adds baseline, truncates float data to integers and
