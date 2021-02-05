@@ -6,6 +6,7 @@ import numba
 from numba.typed import List
 
 from .common import sort_by_channel
+import wfsim
 from wfsim.load_resource import load_config
 
 # TODO never worked with logging, read this up
@@ -164,12 +165,12 @@ class Pulse:
         log.debug('Create spe waveform templates with %s ns resolution' % pmt_pulse_time_rounding)
 
 
-@numba.njit(nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True, parallel=True)
 def copy_photon_information(times_and_channels, photons):
     """
     Copies photon information from one to another array.
     """
-    for i in range(len(times_and_channels)):
+    for i in numba.prange(len(times_and_channels)):
         tc = times_and_channels[i]
         ph = photons[i]
         ph['time'] = tc['time']
@@ -484,54 +485,6 @@ def add_current(photon_timings,
             pmt_current_templates[reminder] * gain_total
 
 
-# Take as it is only removed signature:
-@numba.njit(nogil=True, cache=True)
-def find_intervals_below_threshold(w, threshold, holdoff, result_buffer):
-    """
-    Fills result_buffer with l, r bounds of intervals in w < threshold.
-
-    :param w: Waveform to do hitfinding in
-    :param threshold: Threshold for including an interval
-    :param result_buffer: numpy N*2 array of ints, will be filled by function.
-                          if more than N intervals are found, none past the first N will be processed.
-    :returns : number of intervals processed
-    Boundary indices are inclusive, i.e. the right boundary is the last index which was < threshold
-    """
-    result_buffer_size = len(result_buffer)
-    last_index_in_w = len(w) - 1
-
-    in_interval = False
-    current_interval = 0
-    current_interval_start = -1
-    current_interval_end = -1
-
-    for i, x in enumerate(w):
-
-        if x < threshold:
-            if not in_interval:
-                # Start of an interval
-                in_interval = True
-                current_interval_start = i
-
-            current_interval_end = i
-
-        if ((i == last_index_in_w and in_interval) or
-                (x >= threshold and i >= current_interval_end + holdoff and in_interval)):
-            # End of the current interval
-            in_interval = False
-
-            # Add bounds to result buffer
-            result_buffer[current_interval, 0] = current_interval_start
-            result_buffer[current_interval, 1] = current_interval_end
-            current_interval += 1
-
-            if current_interval == result_buffer_size:
-                result_buffer[current_interval, 1] = len(w) - 1
-
-    n_intervals = current_interval  # No +1, as current_interval was incremented also when the last interval closed
-    return n_intervals
-
-
 @numba.njit(nogil=True, cache=True)
 def _add_noise(data, noise_data):
     """
@@ -543,13 +496,13 @@ def _add_noise(data, noise_data):
     data[:] += noise_data[id_t:length_noise + id_t]
 
 
-@numba.njit(nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True, parallel=True)
 def _digitize_signal(data, baseline, saturation_value=2**14):
     """
     Function which adds baseline, truncates float data to integers and
     and applies saturation.
     """
-    for i in range(len(data)):
+    for i in numba.prange(len(data)):
         d = data[i]
         d = baseline - d
         d = d // 1
@@ -577,9 +530,9 @@ def _zle(pulse, threshold, pre_trigger, post_trigger):
     intervals = np.zeros((len(pulse), 2), dtype=np.int64)
 
     # Test pulse for values above threshold:
-    n_intervals = find_intervals_below_threshold(pulse,
-                                                 threshold,
-                                                 pre_trigger + post_trigger,
-                                                 intervals
-                                                 )
+    n_intervals = wfsim.utils.find_intervals_below_threshold(pulse,
+                                                             threshold,
+                                                             pre_trigger + post_trigger,
+                                                             intervals
+                                                             )
     return intervals[:n_intervals]
