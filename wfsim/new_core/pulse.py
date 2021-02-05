@@ -165,7 +165,7 @@ class Pulse:
         log.debug('Create spe waveform templates with %s ns resolution' % pmt_pulse_time_rounding)
 
 
-@numba.njit(nogil=True, cache=True, parallel=True)
+@numba.njit(nogil=True, cache=True)
 def copy_photon_information(times_and_channels, photons):
     """
     Copies photon information from one to another array.
