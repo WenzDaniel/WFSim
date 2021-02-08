@@ -417,7 +417,7 @@ class S2(Pulse):
         self.photon_timings(t, n_electron, z_obs, positions, sc_gain)
         self.photon_channels(positions)
 
-        super().__call__()
+        #super().__call__()
 
     def inverse_field_distortion(self, x, y, z):
         positions = np.array([x, y, z]).T
@@ -489,16 +489,17 @@ class S2(Pulse):
         distance = jagged(np.matmul(xy, rotation_mat)[:, 1])  # shortest distance from any wire
 
         index = np.zeros(shape).astype(int)
-        @njit
-        def _luminescence_timings_index(distance, x_grid, n_grid, i_grid, shape, index):
-            for ix in range(shape[0]):
-                pitch_index = np.argmin(np.abs(distance[ix] - x_grid))
-                for iy in range(shape[1]):
-                    index[ix, iy] = i_grid[pitch_index] + np.random.randint(n_grid[pitch_index])
-
-        _luminescence_timings_index(distance, x_grid, n_grid, i_grid, shape, index)
+        self._luminescence_timings_index(distance, x_grid, n_grid, i_grid, shape, index)
 
         return self.resource.s2_luminescence['t'][index]
+    
+    @staticmethod
+    @njit
+    def _luminescence_timings_index(distance, x_grid, n_grid, i_grid, shape, index):
+        for ix in range(shape[0]):
+            pitch_index = np.argmin(np.abs(distance[ix] - x_grid))
+            for iy in range(shape[1]):
+                index[ix, iy] = i_grid[pitch_index] + np.random.randint(n_grid[pitch_index])
 
     @staticmethod
     @njit
@@ -560,6 +561,7 @@ class S2(Pulse):
             self._photon_timings = self.luminescence_timings_garfield(
                 np.repeat(xy, n_electron, axis=0),
                 (nele, npho))
+
         self._photon_timings += np.repeat(self._electron_timings, npho).reshape((nele, npho))
 
         # Crop number of photons by random number generated with poisson
