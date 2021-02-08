@@ -43,6 +43,7 @@ class S1:
         self.turned_off_pmts = np.arange(self.n_channels)[np.array(config['gains']) == 0]
 
         # Use numba friendly typed dicts:
+        # TODO: Move from numba typed dicts to structure arrays, much faster!
         self.timing_dict = nbDict.empty(key_type=types.unicode_type,
                                         value_type=types.float64,
                                         )
@@ -62,8 +63,15 @@ class S1:
             self.timing_dict[key] = config[key]
 
     def __call__(self, instructions):
-        # TODO Add doc string
+        """
+        Function which computes S1 properties for a given set of
+        interactions. Please note, that the number of photons in the
+        instruction is updated according to the LY.
 
+        :param instructions:
+        :return: numpy structured array of photon arrival times and
+            channels.
+        """
         # Cannot use [['x', 'y', 'z']] since
         # interpolated maps do not like this.
         pos = np.array([instructions['x'],
@@ -146,7 +154,7 @@ def get_s1_pulse_properties(interactions, pattern_map, channels, config, model, 
         offset += n_ph
 
 
-@numba.njit(parallel=True)
+@numba.njit(parallel=False)
 def get_pmt_channels(n_ph, channels, pattern):
     """
     Function which returns the channel ids for a given probability
@@ -164,7 +172,7 @@ def get_pmt_channels(n_ph, channels, pattern):
     return res
 
 
-@numba.njit(parallel=True)
+@numba.njit(parallel=False)
 def get_photon_timing(n_ph, efield, int_type, phase, recombination_model, config):
     """
     Computes the photon arrival time depending on LXe recombination and singlet

@@ -27,14 +27,15 @@ class Pulse:
 
         # TODO also this function should get an return for easier testing
         # TODO add nveto compatibility?
+        # TODO add high energy channels.
         self.init_pmt_current_templates()
         self.charge, self.pmt_spe_distribution = self.init_spe_scaling_factor_distributions()
 
-    def __call__(self, times_and_channels):
+    def __call__(self, times_and_channels,
+                 add_baseline=True, add_noise=True, add_zle=True):
         """
         TODO: Add doc string
         """
-        # TODO add high energy channels.
         # Get Photon TTS values:
         TTS = np.random.normal(self.config['pmt_transit_time_mean'],
                                self.config['pmt_transit_time_spread'],
@@ -76,25 +77,26 @@ class Pulse:
                                     self._pmt_current_templates,
                                     self.config.get('sample_duration'),
                                     self.resource.noise_data,
-                                    add_baseline=True,
-                                    add_noise=True,
-                                    add_zle=True
+                                    config=self.config,
+                                    add_baseline=add_baseline,
+                                    add_noise=add_noise,
+                                    add_zle=add_zle
                                     )
         return props, pulses
 
     def init_spe_scaling_factor_distributions(self, detector='tpc', truncate=True):
         """
-        Function which reads in ADC x Sample SPE disributions.
+        Function which reads in ADC x Sample SPE distribution.
 
-        Note if a distribtion extents into negative regions it is truncated.
+        Note if a distraction extents into negative regions it is truncated.
 
         :param detector: Which detector should be used.
         :param truncate: If true SPE distributions are truncated in the
             negative regions.
 
-        :retunrs: two numpy.arrays. First one containing the charge binning
+        :returns: two numpy.arrays. First one containing the charge binning
             in units of ADC x sample and the second array contains the
-            distributions for the induvodual PMTs.
+            distributions for the individual PMTs.
         """
         # TODO: How to add the nveto?
         spe_shapes = self.resource.photon_area_distribution
@@ -170,7 +172,7 @@ def copy_photon_information(times_and_channels, photons):
     """
     Copies photon information from one to another array.
     """
-    for i in numba.prange(len(times_and_channels)):
+    for i in range(len(times_and_channels)):
         tc = times_and_channels[i]
         ph = photons[i]
         ph['time'] = tc['time']
@@ -221,16 +223,16 @@ def make_pulses(times_and_channels,
                 spe_templates,
                 dt,
                 noise_data,
+                config,
                 add_noise=True,
                 add_baseline=True,
                 add_zle=True,
                 ):
+    #TODO: Add doc-string
     if add_zle and not add_baseline:
         raise ValueError('ZLE only works together with baseline! '
                          'Plase set "add_baseline" to True.')
 
-    # TODO: Add check that pre/post trigger is dividable by dt!
-    # TODO: Add option for pre/post trigger hardcoded in _make_pulses
     # TODO: Move dtpys into a new file?
     pulse_properties = np.zeros(len(times_and_channels),
                                 dtype=[(('Unix time of the digitized photon pulse',
@@ -252,8 +254,8 @@ def make_pulses(times_and_channels,
                                        dt,
                                        pulse_properties,
                                        noise_data,
-                                       pre_trigger_window=500,
-                                       post_trigger_window=500,
+                                       pre_trigger_window=config['pre_trigger'],
+                                       post_trigger_window=config['post_trigger'],
                                        add_noise=add_noise,
                                        add_baseline=add_baseline,
                                        add_zle=add_zle
@@ -267,8 +269,8 @@ def _make_pulses(times_and_channels,
                  dt,
                  pulse_properties,
                  noise_data,
-                 pre_trigger_window=500,
-                 post_trigger_window=500,
+                 pre_trigger_window=50,
+                 post_trigger_window=50,
                  add_noise=True,
                  add_baseline=True,
                  add_zle=True
@@ -287,7 +289,7 @@ def _make_pulses(times_and_channels,
     :param pulse_properties:
     :param noise_data: Flat numpy.array containing some noise data.
     :param pre_trigger_window: Integer, digitizer pre-trigger window in
-        ns.
+        sample.
     :param post_trigger_window: Same as pre-trigger
     :param add_noise: Boolean, if True noise is added to the pulse.
     :param add_baseline: Boolean, if True, add baseline invert pulse
@@ -306,13 +308,13 @@ def _make_pulses(times_and_channels,
     current_channel = times_and_channels[0]['channel']
 
     # Get pulse start for the first photon:
-    pulse_start = times_and_channels[0]['time'] - pre_trigger_window
+    pulse_start = times_and_channels[0]['time'] - pre_trigger_window*dt
     if pulse_start < 0:
         raise ValueError('Found a pulse with a negative start time. '
                          'This might be due to a too small time offset for '
                          'the first interaction!')
 
-    pulse_end = times_and_channels[0]['time'] + time_spe_signal + post_trigger_window
+    pulse_end = times_and_channels[0]['time'] + time_spe_signal + post_trigger_window*dt
 
     n_pulses = 0
     photon_offset = 0
@@ -322,7 +324,7 @@ def _make_pulses(times_and_channels,
         # If yes updated pulse end and number of photons in pulse
         # If not create pulse
         time = times_and_channels[phi]['time']
-        photon_start = time - pre_trigger_window
+        photon_start = time - pre_trigger_window*dt
 
         ch = times_and_channels[phi]['channel']
 
@@ -331,7 +333,7 @@ def _make_pulses(times_and_channels,
             # 10 ns sampling conversion via floor-division.
             # >= to follow the same logic as holdoff in
             # wfsim.utils.find_intervals_below_threshold
-            pulse_end = time + time_spe_signal + post_trigger_window
+            pulse_end = time + time_spe_signal + post_trigger_window*dt
             n_photons_per_pulse += 1
 
         if (ch != current_channel
@@ -381,18 +383,18 @@ def _make_pulses(times_and_channels,
                 # TODO: Add threshold per channel
                 intervals = _zle(pulse,
                                  16000 - 20 - 1,
-                                 pre_trigger_window // dt,  # TODO change post/pre-triggger into samples?
-                                 post_trigger_window // dt)
+                                 pre_trigger_window,
+                                 post_trigger_window)
             else:
-                intervals = np.array([[pre_trigger_window // dt,
-                                       len(pulse) - post_trigger_window // dt]])
+                intervals = np.array([[pre_trigger_window,
+                                       len(pulse) - post_trigger_window]])
 
             if len(intervals) > 1:
                 # Only needed if we have to split a pulse, if not needed
                 # use cheaper part below:
                 for le, re in intervals:
-                    le -= pre_trigger_window // dt
-                    re += post_trigger_window // dt
+                    le -= pre_trigger_window
+                    re += post_trigger_window
                     pulses.append(pulse[le:re])
 
                     # Now pulse properties:
@@ -419,8 +421,8 @@ def _make_pulses(times_and_channels,
             if len(intervals) == 1:
                 # Simple case, of just a single interval. Store pulse and pulse properties:
                 le, re = intervals[0]
-                le -= pre_trigger_window // dt
-                re += post_trigger_window // dt
+                le -= pre_trigger_window
+                re += post_trigger_window
                 pulses.append(pulse[le:re])
 
                 pulse_properties[n_pulses]['time'] = (pulse_start + le) * dt
@@ -433,7 +435,7 @@ def _make_pulses(times_and_channels,
             # Update values for next pulse:
             current_channel = ch
             pulse_start = photon_start
-            pulse_end = time + time_spe_signal + post_trigger_window
+            pulse_end = time + time_spe_signal + post_trigger_window*dt
             photon_offset += n_photons_per_pulse
             n_photons_per_pulse = 1
 
@@ -491,12 +493,13 @@ def _add_noise(data, noise_data):
     Helper function to add noise data. Function, in case we would like
     to make this more complex.
     """
+    #TODO: add noise per channel?
     length_noise = len(noise_data)
     id_t = np.random.randint(0, length_noise - len(data))
     data[:] += noise_data[id_t:length_noise + id_t]
 
 
-@numba.njit(nogil=True, cache=True, parallel=True)
+@numba.njit(nogil=True, cache=True, parallel=False)
 def _digitize_signal(data, baseline, saturation_value=2**14):
     """
     Function which adds baseline, truncates float data to integers and

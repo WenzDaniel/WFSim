@@ -1,18 +1,18 @@
 import numba
 import numpy as np
 
-
+#TODO: Move from numba typed dicts to structure arrays, much faster!
 @numba.njit
 def _singlet_triplet_delays(phase, singlet_ratio, config):
     """
-    Given the amount of the eximer, return time between excimer decay
+    Given the amount of the excimer, return time between excimer decay
     and their time of generation.
 
     :param phase: Integer indicating if event is in liquid (0)
         or gas (1).
     :param singlet_ratio: Float, fraction of excimers that become
         singlets (NOT the ratio of singlets/triplets!).
-    :param config: Numbda type dict which contains the timing information of the
+    :param config: Numba type dict which contains the timing information of the
         config.
 
     :returns: Time delay for interaction.
