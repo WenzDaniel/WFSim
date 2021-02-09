@@ -23,7 +23,7 @@ instruction_dtype = [(('Waveform simulator event number.', 'event_number'), np.i
              (('Y position of the cluster[cm]', 'y'), np.float32),
              (('Z position of the cluster[cm]', 'z'), np.float32),
              (('Number of quanta', 'amp'), np.int32),
-             (('Recoil type of interaction.', 'recoil'), np.int),
+             (('Recoil type of interaction.', 'recoil'), np.int8),
              (('Energy deposit of interaction', 'e_dep'), np.float32),
              (('Eventid like in geant4 output rootfile', 'g4id'), np.int32),
              (('Volume id giving the detector subvolume', 'vol_id'), np.int32)
@@ -49,7 +49,7 @@ def rand_instructions(c):
     instructions['event_number'] = np.digitize(instructions['time'],
          1e9 * np.arange(c['nchunk']) * c['chunk_size']) - 1
     instructions['type'] = np.tile([1, 2], n)
-    instructions['recoil'] = [1 for i in range(n * 2)]
+    instructions['recoil'] = [7 for i in range(n * 2)] #Use nest ids for  ER
 
     r = np.sqrt(np.random.uniform(0, c['tpc_radius']**2, n))
     t = np.random.uniform(-np.pi, np.pi, n)
@@ -71,7 +71,8 @@ def read_optical(c):
     except:
         raise Exception("Are you using mc version >4?")
 
-    n_events = len(e['eventid'].array(library="np"))
+    event_id = e['eventid'].array(library="np")
+    n_events = len(event_id)
     # lets separate the events in time by a constant time difference
     time = np.arange(1, n_events+1)
 
@@ -91,6 +92,7 @@ def read_optical(c):
     ins['z'] = e["zp_pri"].array(library="np").flatten() / 10.
     ins['time']= 1e7 * time.flatten()
     ins['event_number'] = np.arange(n_events)
+    ins['g4id'] = event_id
     ins['type'] = np.repeat(1, n_events)
     ins['recoil'] = np.repeat(1, n_events)
     ins['amp'] = [len(t) for t in timings]
@@ -101,22 +103,19 @@ def read_optical(c):
     return ins, channels, timings
 
 def instruction_from_csv(filename):
-    """Return wfsim instructions from a csv
-
+    """
+    Return wfsim instructions from a csv
+    
     :param filename: Path to csv file
     """
-    # Pandas does not grok the <U2 field 'recoil' correctly.
-    # Probably it loads it as some kind of string instead...
-    # we'll get it into the right format in the next step.
-    dtype_dict = dict(instruction_dtype)
-    df = pd.read_csv(filename,
-                     names=list(dtype_dict.keys()),
-                     skiprows=1,
-                     dtype={k: v for k, v in dtype_dict.items()
-                            if k != 'recoil'})
-
-    # Convert to records and check format
-    recs = df.to_records(index=False, column_dtypes=dtype_dict)
+    df = pd.read_csv(filename)
+    
+    recs = np.zeros(len(df),
+                    dtype=instruction_dtype
+                   )
+    for column in df.columns:
+        recs[column]=df[column]
+        
     expected_dtype = np.dtype(instruction_dtype)
     assert recs.dtype == expected_dtype, \
         f"CSV {filename} produced wrong dtype. Got {recs.dtype}, expected {expected_dtype}."
@@ -279,7 +278,7 @@ class ChunkRawRecordsOptical(ChunkRawRecords):
                  default='https://raw.githubusercontent.com/XENONnT/private_nt_aux_files/master/sim_files/fax_config_nt.json?token=AHCU5AZMPZABYSGVRLDACR3ABAZUA'),
     strax.Option('gain_model',
                  default=('to_pe_per_run', 'https://github.com/XENONnT/private_nt_aux_files/blob/master/sim_files/to_pe_nt.npy?raw=true'),
-                 help='PMT gain model. Specify as (model_type, model_config)'),
+                 help='PMT gain model. Specify as (model_type, model_config).'),
     strax.Option('detector', default='XENONnT', track=True),
     strax.Option('channel_map', track=False, type=immutabledict,
                  help="immutabledict mapping subdetector to (min, max) "
@@ -290,8 +289,6 @@ class ChunkRawRecordsOptical(ChunkRawRecords):
                  help="Number of pmts in top array. Provided by context"),
     strax.Option('neutron_veto', default=False, track=True,
                  help="Flag for nVeto optical simulation instead of TPC"),
-    strax.Option('mc_version_above_4', default=True, track=True, 
-                 help="Flag above MC version 4. to generate optical"),
 )
 class FaxSimulatorPlugin(strax.Plugin):
     depends_on = tuple()
@@ -370,6 +367,7 @@ class FaxSimulatorPlugin(strax.Plugin):
         """Return whether all instructions has been used."""
         return self.sim.source_finished()
 
+
 @export
 class RawRecordsFromFaxNT(FaxSimulatorPlugin):
     provides = ('raw_records', 'raw_records_he', 'raw_records_aqmon', 'truth')
@@ -421,6 +419,7 @@ class RawRecordsFromFaxNT(FaxSimulatorPlugin):
             data=result[data_type],
             data_type=data_type) for data_type in self.provides}
 
+
 @export
 class RawRecordsFromFaxEpix(RawRecordsFromFaxNT):
     depends_on = 'epix_instructions'
@@ -439,7 +438,13 @@ class RawRecordsFromFaxEpix(RawRecordsFromFaxNT):
 
         return {data_type:result[data_type] for data_type in self.provides}
 
-    def is_ready(self):
+    def get_instructions(self):
+        pass
+
+    def check_instructions(self):
+        pass
+
+    def is_ready(self,chuck_i):
         """Overwritten to mimic online input plugin.
         Returns False to check source finished;
         Returns True to get next chunk.
@@ -470,10 +475,15 @@ class RawRecordsFromFaxOptical(RawRecordsFromFaxNT):
 class RawRecordsFromFaxnVeto(RawRecordsFromFaxOptical):
     provides = ('raw_records_nv', 'truth')
     data_kind = immutabledict(zip(provides, provides))
-    #Why does the data_kind need to be repeated?? So the overriding of the 
+    # Why does the data_kind need to be repeated?? So the overriding of the 
     # provides doesn't work in the setting of the data__kind?
+
+    def compute(self):
+        result = super().compute()
+        result['raw_records_nv'].data['channel'] += 2000  # nVeto PMT ID offset
+        return result
 
 
     def check_instructions(self):
-        #Are there some nveto boundries we need to include?
+        # Are there some nveto boundries we need to include?
         pass
