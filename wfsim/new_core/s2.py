@@ -6,7 +6,7 @@ from wfsim.new_core.timing_properties import _singlet_triplet_delays
 
 class S2:
 
-    def __init_(self, config):
+    def __init__(self, config):
         #TODO update init
         self.config = config
         if self.config['detector'] != 'XENONnT':
