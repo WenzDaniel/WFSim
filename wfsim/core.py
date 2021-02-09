@@ -523,12 +523,8 @@ class S2(Pulse):
         distance = jagged(np.matmul(xy, rotation_mat)[:, 1])  # shortest distance from any wire
 
         index = np.zeros(shape).astype(int)
-<<<<<<< HEAD
-        self._luminescence_timings_index(distance, x_grid, n_grid, i_grid, shape, index)
-=======
 
         self._luminescence_timings_garfield(distance, x_grid, n_grid, i_grid, shape, index)
->>>>>>> upstream/master
 
         return self.resource.s2_luminescence['t'][index]
     
