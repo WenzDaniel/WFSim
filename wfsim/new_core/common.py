@@ -3,17 +3,19 @@ import numpy as np
 
 
 @numba.njit(nogil=True, cache=True)
-def _rand_choice_nb(arr, prob):
+def _rand_choice_nb(arr, prob, n=1):
     """
-    Function which mimis the behavior of np.random.choice including the "p" option.
+    Function which mimics the behavior of np.random.choice including the "p" option.
 
     :param arr: A 1D numpy array of values to sample from.
     :param prob: A 1D numpy array of probabilities for the given samples.
         The sum of the probabilities must be properly normalized!
+    :param n: Indicates how many random numbers should be drawn from the
+        distribution.
     :return: A random sample from the given array with a given probability.
     """
     # Function which mimics np.random.choic stolen from https://github.com/numba/numba/issues/2539
-    return arr[np.searchsorted(np.cumsum(prob), np.random.random(), side="right")]
+    return arr[np.searchsorted(np.cumsum(prob), np.random.random(n), side="right")]
 
 
 @numba.njit(nogil=True, cache=True)

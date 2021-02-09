@@ -3,16 +3,27 @@ import numpy as np
 
 from wfsim.load_resource import load_config
 from wfsim.new_core.timing_properties import _singlet_triplet_delays
+from wfsim.new_core.common import _rand_choice_nb
+
 
 class S2:
 
     def __init__(self, config):
         #TODO update init
         self.config = config
+
+        # TODO add all missing features:
         if self.config['detector'] != 'XENONnT':
             # TODO address this issue. It is mainly due to the maps and
             #  configs.
             raise ValueError('Currently only nT is supported!')
+        if self.config['field_distortion_on']:
+            raise ValueError("Field distortions are currently not supported!")
+        if self.config['s2_luminescence_model'] == 'simple':
+            raise ValueError("Simple luminescence model not implemented.")
+        if self.config['s2_mean_area_fraction_top'] > 0:
+            raise ValueError('Renormalization of pattern maps according to mean' 
+                             ' area fraction to not yet supported.')
 
         self.config.update(getattr(self.config, self.__class__.__name__, {}))  # TODO: This may be needed to be changed
         # not sure yet why this line is needed
@@ -149,6 +160,18 @@ class S2:
                        self.config['s2_time_spread'],
                        self.timing_dict
                        )
+
+        # Distributing photons over channels:
+        # Load PMT probability map for a given interaction position:
+        points = np.array([interactions['x'], interactions['y']]).T
+        pattern = self.resource.s2_pattern_map(points)
+        # Normalize map:
+        norm = np.sum(pattern, axis=1)
+        pattern = (pattern.T / norm).T
+
+        # Assign channel values to the photons:
+        # TODO remove hardcoded channel values.
+        get_channels(interactions, photons, pattern, np.arange(494, dtype=np.int16))
 
         return photons
 
@@ -342,3 +365,23 @@ def _propagate_photons(pitch_index,
         res[i] = t
 
     return res
+
+
+@numba.njit
+def get_channels(interactions, photons, pattern, pmt_channel):
+    """
+    Function which assigns channels to photons as well as event-
+    and g4id.
+
+    """
+    offset = 0
+    for ind, inter in enumerate(interactions):
+        n_ph = inter['s2_photons']
+        channel = _rand_choice_nb(pmt_channel, pattern[ind], n_ph)
+        ph = photons[offset:offset + n_ph]
+        ph['channel'][:] = channel
+
+        # Add information about the event- and g4id:
+        ph['event_number'][:] = inter['event_number']
+        ph['g4id'][:] = inter['g4id']
+        offset += n_ph
