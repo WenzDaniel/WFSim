@@ -99,7 +99,7 @@ class S1:
 
         get_s1_pulse_properties(instructions,
                                 pattern_map,
-                                np.arange(self.n_channels + 0.1),
+                                np.arange(self.n_channels + 0.1, dtype=np.int16),
                                 self.timing_dict,
                                 self.config['s1_model_type'],
                                 res)
@@ -111,7 +111,7 @@ class S1:
         return res
 
 
-@numba.njit()
+@numba.njit(cache=True)
 def get_s1_pulse_properties(interactions, pattern_map, channels, config, model, res):
     """
     Function which distributes photons into PMT channels according to a light
@@ -136,7 +136,8 @@ def get_s1_pulse_properties(interactions, pattern_map, channels, config, model, 
         if not n_ph:
             continue
         normalized_pattern = pattern_map[ind] / np.sum(pattern_map[ind])
-        res['channel'][offset:offset + n_ph] = get_pmt_channels(n_ph, channels, normalized_pattern)
+        #res['channel'][offset:offset + n_ph] = get_pmt_channels(n_ph, channels, normalized_pattern)
+        res['channel'][offset:offset + n_ph] = _rand_choice_nb(channels, normalized_pattern, n_ph)
 
         # Photon timing:
         t0 = inter['time']
@@ -154,7 +155,7 @@ def get_s1_pulse_properties(interactions, pattern_map, channels, config, model, 
         offset += n_ph
 
 
-@numba.njit(parallel=False)
+@numba.njit(parallel=False, cache=True)
 def get_pmt_channels(n_ph, channels, pattern):
     """
     Function which returns the channel ids for a given probability
@@ -165,14 +166,14 @@ def get_pmt_channels(n_ph, channels, pattern):
     :param pattern: Probability map for the channels. Must be
         proeprly normalized!
     """
-    res = np.zeros(n_ph, dtype=np.int32)
+    res = np.zeros(n_ph, dtype=np.int16)
 
     for i in numba.prange(n_ph):
         res[i] = _rand_choice_nb(channels, pattern)
     return res
 
 
-@numba.njit(parallel=False)
+@numba.njit(parallel=False, cache=True)
 def get_photon_timing(n_ph, efield, int_type, phase, recombination_model, config):
     """
     Computes the photon arrival time depending on LXe recombination and singlet
