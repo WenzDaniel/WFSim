@@ -282,7 +282,6 @@ def photon_timings(interactions,
     TODO Add doc-sting
     """
     offset = 0
-    ph_i = 0
     elec_i = 0
     for inter in interactions:
         # Looping over interacrtions and extra informations from the
