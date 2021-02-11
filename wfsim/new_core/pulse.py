@@ -530,7 +530,7 @@ def _zle(pulse, threshold, pre_trigger, post_trigger):
     :returns: numpy.array of the shape n x 2 containing the start and
         end of the pulse intervals.
     """
-    intervals = np.zeros((len(pulse), 2), dtype=np.int64)
+    intervals = np.zeros((len(pulse)//2, 2), dtype=np.int64)
 
     # Test pulse for values above threshold:
     n_intervals = wfsim.utils.find_intervals_below_threshold(pulse,
