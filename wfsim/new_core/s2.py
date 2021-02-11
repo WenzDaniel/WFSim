@@ -176,7 +176,7 @@ class S2:
         return photons
 
 
-@numba.njit()
+@numba.njit(cache=True)
 def distance_to_wire(x, y, rotation_matrix, pitch):
     """
     Rotating x and y to coordinate system where y-axis is aligned to
@@ -196,7 +196,7 @@ def distance_to_wire(x, y, rotation_matrix, pitch):
     return distance
 
 
-@numba.njit(parallel=False)
+@numba.njit(parallel=False, cache=True)
 def propagate_electrons(interactions,
                         drift_velocity,
                         drift_time_gate,
@@ -239,7 +239,7 @@ def propagate_electrons(interactions,
     return charge_yields
 
 
-@numba.njit
+@numba.njit(cache=True)
 def create_s2_scintillation_photons(interactions, sc_gains):
     """
     Function which draws for each electron the number of generated
@@ -264,7 +264,7 @@ def create_s2_scintillation_photons(interactions, sc_gains):
     return n_photon_per_electron
 
 
-@numba.njit
+@numba.njit(cache=True)
 def photon_timings(interactions,
                    photons,
                    photons_per_electron,
@@ -335,7 +335,7 @@ def photon_timings(interactions,
             offset += nph
 
 
-@numba.njit(parallel=False)
+@numba.njit(parallel=False, cache=True)
 def _propagate_photons(pitch_index,
                        nph,
                        n_grid,
@@ -367,7 +367,7 @@ def _propagate_photons(pitch_index,
     return res
 
 
-@numba.njit
+@numba.njit(cache=True)
 def get_channels(interactions, photons, pattern, pmt_channel):
     """
     Function which assigns channels to photons as well as event-
