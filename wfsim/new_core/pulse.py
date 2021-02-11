@@ -29,7 +29,7 @@ class Pulse:
         # TODO add nveto compatibility?
         # TODO add high energy channels.
         self.init_pmt_current_templates()
-        self.charge, self.pmt_spe_distribution = self.init_spe_scaling_factor_distributions()
+        self.pmt_spe_distribution = self.init_spe_scaling_factor_distributions()
 
     def __call__(self, times_and_channels,
                  add_baseline=True, add_noise=True, add_zle=True):
@@ -67,7 +67,9 @@ class Pulse:
 
         # Add "gain" values to photons, for DPE we draw two times a gain value
         # and add them up.
-        get_to_adc(photons, self.charge, self.pmt_spe_distribution)
+        # TODO: Truncate spectra for negative values. Add PMT gains, currently
+        #  mormalized to "1 PE" (might be useful for fast simulator).
+        get_to_adc(photons, self.pmt_spe_distribution)
 
         # Make pulses:
         # Two outputs since awkward arrays cannot be used,
@@ -82,52 +84,37 @@ class Pulse:
                                     add_noise=add_noise,
                                     add_zle=add_zle
                                     )
+        del photons
         return props, pulses
 
-    def init_spe_scaling_factor_distributions(self, detector='tpc', truncate=True):
-        """
-        Function which reads in ADC x Sample SPE distribution.
-
-        Note if a distraction extents into negative regions it is truncated.
-
-        :param detector: Which detector should be used.
-        :param truncate: If true SPE distributions are truncated in the
-            negative regions.
-
-        :returns: two numpy.arrays. First one containing the charge binning
-            in units of ADC x sample and the second array contains the
-            distributions for the individual PMTs.
-        """
-        # TODO: How to add the nveto?
+    
+    def init_spe_scaling_factor_distributions(self, gains=np.ones(496)):
+        #TODO: Add information
+        # Extract the spe pdf from a csv file into a pandas dataframe
         spe_shapes = self.resource.photon_area_distribution
 
-        # Charge values in ADC x Sample:
-        charge_binning = spe_shapes.loc[:, 'charge'].to_numpy()
+        # Create a converter array from uniform random numbers to SPE gains (one interpolator per channel)
+        # Scale the distributions so that they have an SPE mean of 1 and then calculate the cdf
+        uniform_to_pe_arr = []
+        for ch in spe_shapes.columns[1:]:  # skip the first element which is the 'charge' header
+            if spe_shapes[ch].sum() > 0:
+                mean_spe = (spe_shapes['charge'].values * spe_shapes[ch]).sum() / spe_shapes[ch].sum()
+                scaled_bins = spe_shapes['charge'].values * gains[int(ch)]/ mean_spe
+                cdf = np.cumsum(spe_shapes[ch]) / np.sum(spe_shapes[ch])
+            else:
+                # if sum is 0, just make some dummy axes to pass to interpolator
+                cdf = np.linspace(0, 1, 10)
+                scaled_bins = np.zeros_like(cdf)
 
-        channel = self.config['channels_in_detector'][detector].astype('str')
-        pmt_distributions = spe_shapes.loc[:, channel].to_numpy()
+            grid_cdf = np.linspace(0, 1, 2001)
+            grid_scale = interp1d(cdf, scaled_bins, 
+                bounds_error=False, 
+                fill_value=(scaled_bins[0], scaled_bins[-1]))(grid_cdf)
 
-        negative_bins = np.argwhere(charge_binning < 0).flatten()
-        if truncate and np.any(negative_bins):
-            # If true let us truncate the distribution so we do not allow
-            # negative charge values.
+            uniform_to_pe_arr.append(grid_scale)
 
-            # Get start and stop of negative bins and set all distributions here to
-            # zero:
-            start, stop = negative_bins.min(), negative_bins.max() + 1
-            pmt_distributions[start:stop, :] = 0
-
-            # Renormalize distirbutions:
-            norm = pmt_distributions.sum(axis=0)
-
-            # Set normalization to one if distributions sum up to zero.
-            # Bit odd but prevents from 1/0-erros.
-            norm = np.where(norm == 0, np.ones(len(norm)), norm)
-
-            # Renomralize SPE distributions for the individual channels:
-            pmt_distributions = pmt_distributions / norm
-
-        return charge_binning, pmt_distributions.T
+        return np.stack(uniform_to_pe_arr)
+    
 
     def init_pmt_current_templates(self):
         """
@@ -177,10 +164,10 @@ def copy_photon_information(times_and_channels, photons):
         ph = photons[i]
         ph['time'] = tc['time']
         ph['channel'] = tc['channel']
-
-
+        
+        
 @numba.njit(nogil=True, cache=True)
-def get_to_adc(photons, charge, spe_adc_dis):
+def get_to_adc(photons, spe_spectra):
     """
     Function which adds gain and information about DPE signal to photons
     array. Requires photons to be sorted by channel. Writes result direct
@@ -197,25 +184,16 @@ def get_to_adc(photons, charge, spe_adc_dis):
     :param spe_adc_dis:
     """
 
-    prev_ch = photons[0]['channel']
-    prob = spe_adc_dis[prev_ch]
-    prob = np.cumsum(prob)
     for p in photons:
         ch = p['channel']
-
-        if ch != prev_ch:
-            prob = spe_adc_dis[prev_ch]
-            prob = np.cumsum(prob)
-            #TODO add linear scaling factor according to gain.
-
-        index = np.searchsorted(prob, np.random.random(), side="right")
-        gain = charge[index]
-
+        charge = spe_spectra[ch]
+        
+        gain = charge[int(2000*np.random.random())]
+        
         if p['dpe']:
             # LXe vuv-photon induced DPE emission:
-            index = np.searchsorted(prob, np.random.random(), side="right")
-            gain += charge[index]
-
+            gain += charge[int(2000*np.random.random())]
+        
         p['gain'] = gain
 
 
@@ -530,7 +508,7 @@ def _zle(pulse, threshold, pre_trigger, post_trigger):
     :returns: numpy.array of the shape n x 2 containing the start and
         end of the pulse intervals.
     """
-    intervals = np.zeros((len(pulse), 2), dtype=np.int64)
+    intervals = np.zeros((len(pulse)//2, 2), dtype=np.int64)
 
     # Test pulse for values above threshold:
     n_intervals = wfsim.utils.find_intervals_below_threshold(pulse,
