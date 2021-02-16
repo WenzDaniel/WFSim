@@ -474,7 +474,7 @@ def _add_noise(data, noise_data):
     #TODO: add noise per channel?
     length_noise = len(noise_data)
     id_t = np.random.randint(0, length_noise - len(data))
-    data[:] += noise_data[id_t:length_noise + id_t]
+    data[:] += noise_data[id_t:id_t+len(data)]
 
 
 @numba.njit(nogil=True, cache=True, parallel=False)
