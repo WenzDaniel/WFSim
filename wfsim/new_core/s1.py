@@ -1,6 +1,4 @@
 import numba
-from numba.core import types
-from numba.typed import Dict as nbDict
 
 import numpy as np
 from .common import _rand_choice_nb
@@ -55,7 +53,6 @@ class S1:
                 'maximum_recombination_time',
                 's1_decay_time']
         self.timing_dict = np.array(1, dtype=[(k, np.float64)for k in keys])
-
 
         for key in keys:
             self.timing_dict[key] = config[key]
