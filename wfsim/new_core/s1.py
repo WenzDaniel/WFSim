@@ -43,10 +43,6 @@ class S1:
         self.turned_off_pmts = np.arange(self.n_channels)[np.array(config['gains']) == 0]
 
         # Use numba friendly typed dicts:
-        # TODO: Move from numba typed dicts to structure arrays, much faster!
-        self.timing_dict = nbDict.empty(key_type=types.unicode_type,
-                                        value_type=types.float64,
-                                        )
         keys = ['s1_ER_alpha_singlet_fraction',
                 's1_NR_singlet_fraction',
                 's1_ER_recombination_time',
@@ -58,6 +54,8 @@ class S1:
                 'triplet_lifetime_gas',
                 'maximum_recombination_time',
                 's1_decay_time']
+        self.timing_dict = np.array(1, dtype=[(k, np.float64)for k in keys])
+
 
         for key in keys:
             self.timing_dict[key] = config[key]
@@ -136,7 +134,6 @@ def get_s1_pulse_properties(interactions, pattern_map, channels, config, model, 
         if not n_ph:
             continue
         normalized_pattern = pattern_map[ind] / np.sum(pattern_map[ind])
-        #res['channel'][offset:offset + n_ph] = get_pmt_channels(n_ph, channels, normalized_pattern)
         res['channel'][offset:offset + n_ph] = _rand_choice_nb(channels, normalized_pattern, n_ph)
 
         # Photon timing:
@@ -156,31 +153,13 @@ def get_s1_pulse_properties(interactions, pattern_map, channels, config, model, 
 
 
 @numba.njit(parallel=False, cache=True)
-def get_pmt_channels(n_ph, channels, pattern):
-    """
-    Function which returns the channel ids for a given probability
-    pattern map.
-
-    :param n_ph: Number of photons to distribute.
-    :param channels: Channel ids photons have to be distributed over.
-    :param pattern: Probability map for the channels. Must be
-        proeprly normalized!
-    """
-    res = np.zeros(n_ph, dtype=np.int16)
-
-    for i in numba.prange(n_ph):
-        res[i] = _rand_choice_nb(channels, pattern)
-    return res
-
-
-@numba.njit(parallel=False, cache=True)
-def get_photon_timing(n_ph, efield, int_type, phase, recombination_model, config):
+def get_photon_timing(n_ph, electrical_field, int_type, phase, recombination_model, config):
     """
     Computes the photon arrival time depending on LXe recombination and singlet
     and triplet states.
 
     :param n_ph: Number of photons.
-    :param efield: Electric field at the interaction side
+    :param electrical_field: Electric field at the interaction side
     :param int_type: Interaction type must be a nest identifier (e.g. 0 for NR)
     :param phase: Phase of the xenon liquid=0 and gaseous=1.
     :param recombination_model: If ="simple" a simplified scintillation model is used.
@@ -203,7 +182,7 @@ def get_photon_timing(n_ph, efield, int_type, phase, recombination_model, config
                 # 7 = gamma
                 # 8 = beta
                 # 11 = Kr-83m which is both
-                res[i] = er(phase, efield, config)
+                res[i] = er(phase, electrical_field, config)
             elif int_type == 6:
                 # Alphas
                 res[i] = alpha(phase, config)
